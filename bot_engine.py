@@ -15,7 +15,8 @@ class EscapeBotEngine:
         
         if groq_key:
             self.groq_client = Groq(api_key=groq_key)
-            self.model_name = "llama3-70b-8192"
+            # [수정] 중단된 모델(llama3-70b-8192) 대신 최신 모델 사용
+            self.model_name = "llama-3.3-70b-versatile" 
         else:
             self.groq_client = None
 
