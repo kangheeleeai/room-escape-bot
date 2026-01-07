@@ -1,0 +1,10 @@
+streamlit
+firebase-admin
+google-cloud-firestore>=2.14.0
+sentence-transformers
+transformers
+torch
+safetensors
+groq
+tavily-python
+numpy
