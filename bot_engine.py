@@ -20,7 +20,9 @@ class EscapeBotEngine:
             self.groq_client = None
 
     def _call_llm(self, prompt, json_mode=False):
-        if not self.groq_client: return None
+        """Groq API 호출 헬퍼 함수"""
+        if not self.groq_client: return "Error: Groq Client not initialized (Missing API Key)"
+        
         try:
             chat_completion = self.groq_client.chat.completions.create(
                 messages=[
@@ -39,8 +41,9 @@ class EscapeBotEngine:
             )
             return chat_completion.choices[0].message.content
         except Exception as e:
-            print(f"❌ [Error] Groq API 호출 실패: {e}")
-            return None
+            error_msg = f"Groq API Error: {str(e)}"
+            print(f"❌ [Error] {error_msg}")
+            return error_msg # 에러 메시지를 반환하여 UI에 표시
 
     def find_theme_id(self, location, theme_name):
         print(f"🔎 [DB] 테마 ID 검색: {theme_name} (지역: {location})")
@@ -89,11 +92,6 @@ class EscapeBotEngine:
         
         prompt = f"""
         사용자의 질문을 분석하여 방탈출 추천 서비스의 의도(Intent)와 파라미터를 추출하세요.
-        ... (프롬프트는 생략, 실제 코드엔 포함) ...
-        """
-        # (편의상 위쪽 코드와 동일한 프롬프트 사용)
-        prompt = f"""
-        사용자의 질문을 분석하여 방탈출 추천 서비스의 의도(Intent)와 파라미터를 추출하세요.
 
         질문: "{user_query}"
 
@@ -112,14 +110,18 @@ class EscapeBotEngine:
         JSON 형식으로만 반환하세요. 예시:
         {{ "action": "recommend", "location": "강남", "keywords": ["공포"], "theme": null, "mentioned_users": [] }}
         """
-        
         try:
             result_str = self._call_llm(prompt, json_mode=True)
+            # 에러 메시지가 반환되었는지 확인
+            if result_str and "Error:" in result_str:
+                print(f"   ❌ 의도 분석 LLM 에러: {result_str}")
+                return {"action": "recommend", "keywords": []}
+                
             result = json.loads(result_str) if result_str else {"action": "recommend", "keywords": []}
             print(f"   -> 분석 결과: {result}")
             return result
         except Exception as e:
-            print(f"   ❌ 의도 분석 실패: {e}")
+            print(f"   ❌ 의도 분석 파싱 실패: {e}")
             return {"action": "recommend", "keywords": []}
 
     def generate_reply(self, user_query, user_context=None, session_context=None):
@@ -135,18 +137,19 @@ class EscapeBotEngine:
 
         # 2. 플레이 기록 관리
         if action in ['played_check', 'not_played_check']:
-            # ... (기존과 동일)
             if not user_context:
-                return "⚠️ 닉네임이 필요합니다.", {}, {}, action
+                return "⚠️ 플레이 기록을 관리하려면 닉네임 입력이 필요합니다.", {}, {}, action
+            
             loc = intent_data.get('location')
             theme = intent_data.get('theme')
+            
             if theme:
                 tid = self.find_theme_id(loc, theme)
                 if tid:
                     msg = self.update_play_history(user_context, tid, action)
                     return f"{msg} ({loc if loc else ''} {theme})", {}, {}, action
                 else:
-                    return f"⚠️ '{theme}' 테마를 찾을 수 없습니다.", {}, {}, action
+                    return f"⚠️ '{theme}' 테마를 찾을 수 없습니다. 지역 정보가 정확한지 확인해주세요.", {}, {}, action
             else:
                 return "⚠️ 테마 이름을 인식하지 못했습니다.", {}, {}, action
 
@@ -226,7 +229,6 @@ class EscapeBotEngine:
                 return "죄송합니다. 조건에 맞는 테마를 찾지 못했습니다.", {}, filters_to_use, action
 
         # LLM Context 구성 (모든 결과 포함)
-        # ... (기존과 동일)
         context_str = ""
         if 'personalized' in final_results:
             context_str += "\n[취향 맞춤 추천 (Vector)]\n"
@@ -236,6 +238,10 @@ class EscapeBotEngine:
             context_str += "\n[조건 부합 추천 (Rule-Based)]\n"
             for i, item in enumerate(final_results['rule_based']):
                 context_str += f"- {item['title']} (만족도 {item['rating']:.1f}, 공포 {item['fear']:.1f}): {item['desc'][:100]}...\n"
+        if 'text_search' in final_results:
+             context_str += "\n[유사 테마 추천 (Text)]\n"
+             for i, item in enumerate(final_results['text_search']):
+                context_str += f"- {item['title']} (만족도 {item['rating']:.1f}): {item['desc'][:100]}...\n"
 
         intro_msg = ""
         if exclude_ids: 
@@ -260,10 +266,12 @@ class EscapeBotEngine:
         print("📝 [LLM] 최종 답변 생성 요청...")
         response_text = self._call_llm(system_prompt)
         
+        # [수정됨] 에러 발생 시 UI에 노출
+        if not response_text or "Error:" in response_text:
+            error_detail = response_text if response_text else "No response returned"
+            response_text = f"죄송합니다. 답변 생성 중 오류가 발생했습니다.\n\n🛠️ **디버깅 정보:**\n{error_detail}"
+
         print("✅ [BotEngine] 답변 생성 완료")
         print("==================================================\n")
-
-        if not response_text:
-            response_text = "죄송합니다. 답변 생성 중 오류가 발생했습니다."
 
         return response_text, final_results, filters_to_use, action
