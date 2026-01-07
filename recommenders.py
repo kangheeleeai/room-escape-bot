@@ -45,6 +45,7 @@ class RuleBasedRecommender:
 
         docs = query.stream()
         raw_candidates = []
+        count_excluded = 0
 
         for doc in docs:
             data = doc.to_dict()
@@ -52,9 +53,11 @@ class RuleBasedRecommender:
                 ref_id = data.get('ref_id')
                 tid = int(ref_id) if ref_id is not None else int(doc.id)
                 if tid in total_exclude_ids or str(tid) in total_exclude_ids or doc.id in total_exclude_ids:
+                    count_excluded += 1
                     continue
             except:
                 if doc.id in total_exclude_ids:
+                    count_excluded += 1
                     continue
 
             is_match = True

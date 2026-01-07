@@ -9,7 +9,7 @@ def sort_candidates_by_query(candidates, user_query):
     # 기본: 만족도(rating) 높은 순 (내림차순)
     
     if "안무서운" in query_text or "무섭지 않은" in query_text:
-        # 공포도 낮고(ASC), 만족도 높은 순
+        # 공포도 낮고(ASC), 만족도가 높은 순
         candidates.sort(key=lambda x: (x['rating'], -x['fear']), reverse=True)
         
     elif "공포" in query_text or "무서운" in query_text or "호러" in query_text:

@@ -1,9 +1,9 @@
 import json
+import copy
 from groq import Groq
 from tavily import TavilyClient
 from database import firestore, FieldFilter
 from utils import sort_candidates_by_query
-import copy
 
 class EscapeBotEngine:
     def __init__(self, vector_recommender, rule_recommender, groq_key, tavily_key):
@@ -85,19 +85,19 @@ class EscapeBotEngine:
 
         질문: "{user_query}"
 
-        규칙:
-        1. "recommend": 새로운 추천 요청.
-        2. "another_recommend": 다른 추천 요청 ("다른거", "이거 말고").
-        3. "played_check": 플레이함 ("~했어").
-        4. "not_played_check": 플레이 안함 ("~안했어").
+        다음 규칙에 따라 'action'을 결정하세요:
+        1. "recommend": 새로운 추천을 요청함 (예: "강남 공포 테마 추천해줘", "재밌는거 추천좀").
+        2. "another_recommend": 다른 추천을 요청함 (예: "다른거 추천해줘", "이거 말고", "다음").
+        3. "played_check": 특정 테마를 플레이했다고 말함 (예: "강남 링 했어", "X 테마 해봤어").
+        4. "not_played_check": 플레이하지 않았다고 정정하거나 취소함 (예: "링 안했어", "플레이 기록 취소해줘").
 
-        필드 (한국어):
-        - location: 지역명 (예: 강남) or null.
-        - theme: 테마명 or null.
-        - keywords: 추천 키워드 리스트 (예: ["공포", "활동성"]).
-        - mentioned_users: 언급된 닉네임 리스트.
+        다음 필드를 추출하세요 (반드시 한국어로):
+        - location: 지역명 (예: 강남, 홍대, 건대) 또는 null.
+        - theme: 언급된 테마명 (주로 플레이 기록 추가/삭제 시) 또는 null.
+        - keywords: 추천을 위한 키워드 리스트 (장르, 분위기, 특징 등 예: "공포", "활동성", "스토리").
+        - mentioned_users: 질문에 언급된 다른 유저 닉네임 리스트.
 
-        JSON 예시:
+        JSON 형식으로만 반환하세요. 예시:
         {{ "action": "recommend", "location": "강남", "keywords": ["공포"], "theme": null, "mentioned_users": [] }}
         """
         try:
@@ -114,6 +114,7 @@ class EscapeBotEngine:
         # 1. 의도 분석
         intent_data = self.analyze_user_intent(user_query)
         action = intent_data.get('action', 'recommend')
+        print(f"🧠 [Intent] Action: {action}, Data: {intent_data}")
 
         # 2. 플레이 기록 관리
         if action in ['played_check', 'not_played_check']:
@@ -166,18 +167,23 @@ class EscapeBotEngine:
             filters_to_use = current_filters
             exclude_ids = []
 
+        print(f"🔍 [Engine] Filters: {filters_to_use}, Exclude count: {len(exclude_ids)}")
+
         # 4. 추천 실행
         final_results = {}
         
         # [Step 1] Rule-Based Candidates (Top 3)
+        print("🚀 [Step 1] 룰 기반 검색 실행 중...")
         candidates_rule = self.rule_recommender.search_themes(
             filters_to_use, user_query, limit=3, nicknames=final_context, exclude_ids=exclude_ids
         )
         if candidates_rule:
             final_results['rule_based'] = candidates_rule
+            print(f"   -> {len(candidates_rule)}개의 룰 기반 후보 발견.")
 
         # [Step 2] Personalized Vector Candidates (Top 3)
         if final_context:
+            print("🚀 [Step 2] 벡터 검색(개인화) 실행 중...")
             candidates_vector = self.vector_recommender.recommend_by_user_search(
                 final_context, limit=3, filters=filters_to_use, exclude_ids=exclude_ids
             )
@@ -185,9 +191,11 @@ class EscapeBotEngine:
                 # 결과 미세조정 (정렬)
                 final_reranked = sort_candidates_by_query(candidates_vector, user_query)
                 final_results['personalized'] = final_reranked
+                print(f"   -> {len(final_reranked)}개의 개인화 후보 발견.")
 
         # [Step 3] Fallback (Text Vector) - 둘 다 없을 때만
         if not final_results:
+            print("🚀 [Step 3] 결과 없음. 대체 텍스트 검색 실행 중...")
             candidates_text = self.vector_recommender.recommend_by_text(
                 user_query, filters=filters_to_use, exclude_ids=exclude_ids
             )
@@ -196,7 +204,7 @@ class EscapeBotEngine:
             else:
                 return "죄송합니다. 조건에 맞는 테마를 찾지 못했습니다. 😭\n조건을 변경해서 다시 질문해 주시겠어요?", {}, filters_to_use, action
 
-        # LLM Context 구성
+        # LLM Context 구성 (모든 결과 포함)
         context_str = ""
         
         if 'personalized' in final_results:

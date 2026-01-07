@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+from sentence_transformers import SentenceTransformer
 from config import EMBEDDING_MODEL_NAME, LOCAL_CACHE_DIR
 
 try:

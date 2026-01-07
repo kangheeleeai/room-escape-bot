@@ -52,6 +52,7 @@ def init_firebase():
         if not firebase_admin._apps:
             # 1. Streamlit Secrets (배포 환경)
             if "firebase" in st.secrets:
+                # st.secrets["firebase"]는 toml 섹션을 dict로 가져옴
                 cred_info = dict(st.secrets["firebase"])
                 cred = credentials.Certificate(cred_info)
                 firebase_admin.initialize_app(cred)
