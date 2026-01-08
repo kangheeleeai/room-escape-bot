@@ -15,7 +15,7 @@ class EscapeBotEngine:
         
         if groq_key:
             self.groq_client = Groq(api_key=groq_key)
-            self.model_name = "llama-3.3-70b-versatile" # 최신 모델로 변경
+            self.model_name = "llama-3.3-70b-versatile"
         else:
             self.groq_client = None
 
@@ -64,6 +64,11 @@ class EscapeBotEngine:
                 title = data.get('title', '')
                 # 공백 제거 후 포함 여부 확인
                 if target_name in title.replace(" ", ""):
+                    tid = int(data.get('ref_id') or doc.id)
+                    print(f"   ✅ 찾음: {title} (ID: {tid})")
+                    return tid
+                letters = data.get('letters')
+                if target_name in letters.replace(" ", ""):
                     tid = int(data.get('ref_id') or doc.id)
                     print(f"   ✅ 찾음: {title} (ID: {tid})")
                     return tid
@@ -137,12 +142,12 @@ class EscapeBotEngine:
         intent_data = self.analyze_user_intent(user_query)
         action = intent_data.get('action', 'recommend')
 
-        # [NEW] 플레이 기록 문의 처리 ("플레이한 테마")
+        # 2. 플레이 기록 문의 처리 ("플레이한 테마")
         if action == "played_check_inquiry":
             msg = "플레이한 테마를 **[지역, 테마명], [지역, 테마명]** 과 같이 입력해주시면 기록해 드릴게요!\n예시: `[강남, 링], [홍대, 삐릿뽀]`"
             return msg, {}, {}, action
 
-        # [NEW] 플레이 기록 추가/삭제 처리 (다중 처리 지원)
+        # 3. 플레이 기록 추가/삭제 처리 (다중 처리 지원)
         if action in ['played_check', 'not_played_check']:
             if not user_context:
                 return "⚠️ 플레이 기록을 관리하려면 닉네임 입력이 필요합니다.", {}, {}, action
