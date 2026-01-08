@@ -3,7 +3,6 @@ import time
 from database import init_firebase
 from models import load_embed_model
 
-# [수정됨] utils가 아니라 각각의 파일에서 클래스를 가져옵니다.
 from recommenders import RuleBasedRecommender, VectorRecommender
 from bot_engine import EscapeBotEngine
 from config import GROQ_API_KEY, TAVILY_API_KEY
