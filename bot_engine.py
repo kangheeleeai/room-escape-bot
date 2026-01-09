@@ -197,15 +197,14 @@ class EscapeBotEngine:
         # 4. 추천 실행
         final_results = {}
         
-        # Rule-Based
-        if on_log: on_log(f"필터 적용: {filters_to_use}, 제외 ID: {len(exclude_ids)}개")
-        
+        # Rule-Based        
         candidates_rule = self.rule_recommender.search_themes(
             filters_to_use, user_query, limit=3, nicknames=final_context, exclude_ids=exclude_ids, log_func=on_log
         )
         if candidates_rule: final_results['rule_based'] = candidates_rule
 
         # Personalized
+        if on_log: on_log(f"final_context: {final_context}")
         
         if final_context:
             if on_log: on_log(f"필터 적용: {filters_to_use}, 제외 ID: {len(exclude_ids)}개")
