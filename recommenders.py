@@ -123,6 +123,8 @@ class VectorRecommender:
         try:
             fetch_limit = limit + (len(exclude_ids) if exclude_ids else 0) + 20
             themes_ref = self.db.collection('themes')
+            if log_func: log_func(f"[fetch_limit] '{fetch_limit}'")
+            
             
             vector_query = themes_ref.find_nearest(
                 vector_field="embedding_field",
