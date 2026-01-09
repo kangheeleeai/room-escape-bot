@@ -3,6 +3,7 @@ def sort_candidates_by_query(candidates, user_query):
     사용자 쿼리(user_query)에 포함된 키워드(공포, 활동성 등)를 분석하여
     후보 리스트(candidates)를 재정렬합니다.
     """
+    print(user_query)
     if not candidates: return []
     query_text = user_query if user_query else ""
     
