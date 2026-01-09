@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+import logging
 from database import init_firebase
 from models import load_embed_model
 
@@ -7,9 +8,16 @@ from recommenders import RuleBasedRecommender, VectorRecommender
 from bot_engine import EscapeBotEngine
 from config import GROQ_API_KEY, TAVILY_API_KEY
 
+# 기본 로깅 설정 (터미널용)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
+
 st.set_page_config(page_title="방탈출 AI 코난 (Hybrid)", page_icon="🕵️", layout="wide")
 
-# CSS 스타일 주입 (카드 디자인 등)
 st.markdown("""
 <style>
     .theme-card {
@@ -79,7 +87,6 @@ def main():
     st.title("🕵️ 방탈출 AI 코난")
     st.caption("Hybrid Recommender System (Rule-based + Vector)")
 
-    # 초기화
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role": "assistant", "content": "어떤 방탈출 테마를 찾으시나요? 지역이나 장르를 말씀해주세요!"}]
     if "shown_theme_ids" not in st.session_state:
@@ -87,7 +94,6 @@ def main():
     if "last_filters" not in st.session_state:
         st.session_state.last_filters = {}
 
-    # 리소스 로드
     db = init_firebase()
     embed_model = load_embed_model()
 
@@ -95,7 +101,6 @@ def main():
         st.error("🔥 Firebase 연결 실패. 서비스 계정 키 또는 Secrets 설정을 확인하세요.")
         st.stop()
     
-    # 인스턴스 생성
     vec_rec = VectorRecommender(db, embed_model)
     rule_rec = RuleBasedRecommender(db) 
     bot_engine = EscapeBotEngine(vec_rec, rule_rec, GROQ_API_KEY, TAVILY_API_KEY)
@@ -104,14 +109,18 @@ def main():
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-            # 카드 정보가 있으면 렌더링
+            
             cards = msg.get("cards", {})
             debug_info = msg.get("debug_info", {})
-            
+            logs = msg.get("logs", []) # 저장된 로그 확인
+
+            if logs:
+                with st.expander("📜 처리 과정 로그 보기"):
+                    for l in logs:
+                        st.text(l)
+
             if cards:
-                # 탭으로 추천 유형 분리
                 tab1, tab2, tab3 = st.tabs(["🎯 맞춤 추천", "🔎 조건 추천", "🧩 유사 검색"])
-                
                 with tab1:
                     if 'personalized' in cards:
                         for item in cards['personalized']:
@@ -123,23 +132,20 @@ def main():
                             </div>
                             """, unsafe_allow_html=True)
                     else:
-                        st.caption("맞춤 추천 결과가 없습니다.")
-                        
+                        st.caption("결과 없음")
                 with tab2:
                     if 'rule_based' in cards:
                         for item in cards['rule_based']:
                             st.markdown(f"**{item['title']}** ({item['store']}) - ⭐{item['rating']}")
                     else:
-                        st.caption("조건 검색 결과가 없습니다.")
-                
+                        st.caption("결과 없음")
                 with tab3:
                     if 'text_search' in cards:
                         for item in cards['text_search']:
                             st.markdown(f"- {item['title']}")
                     else:
-                        st.caption("유사 검색 결과가 없습니다.")
+                        st.caption("결과 없음")
             
-            # 디버그 정보 표시 (토글이 켜져있을 때만)
             if debug_mode and debug_info:
                 with st.expander("🛠️ 디버그 정보"):
                     st.json(debug_info)
@@ -152,49 +158,52 @@ def main():
 
         with st.chat_message("assistant"):
             if not GROQ_API_KEY:
-                st.error("API Key가 없습니다. 설정 파일(secrets.toml)을 확인해주세요.")
+                st.error("API Key가 없습니다.")
             else:
-                with st.spinner("단서를 분석하고 있습니다... 🧐"):
+                # [핵심 변경] st.status를 사용하여 실시간 로그 출력
+                process_logs = []
+                with st.status("🕵️ 코난이 추리 중입니다...", expanded=True) as status:
+                    
+                    # UI에 로그를 찍고 리스트에도 저장하는 콜백 함수
+                    def ui_logger(msg):
+                        st.write(f"🔹 {msg}") # status 컨테이너 안에 출력
+                        process_logs.append(msg)
+                        logger.info(msg) # 터미널에도 출력
+
                     session_ctx = {
                         'shown_ids': st.session_state.shown_theme_ids,
                         'last_filters': st.session_state.last_filters
                     }
 
-                    # 봇 엔진 호출 (debug_info 리턴값 추가됨)
+                    # bot_engine에 로거 전달
                     reply_text, result_cards, used_filters, action, debug_data = bot_engine.generate_reply(
                         prompt, 
                         user_context=nickname,
-                        session_context=session_ctx
+                        session_context=session_ctx,
+                        on_log=ui_logger  # <--- 콜백 전달
                     )
                     
-                    st.markdown(reply_text)
-                    
-                    if debug_mode:
-                        with st.expander("🛠️ 실시간 분석 로그"):
-                            st.json(debug_data)
-                            st.write(f"Action: {action}")
-                            st.write(f"Applied Filters: {used_filters}")
+                    status.update(label="추리 완료!", state="complete", expanded=False)
 
-                    # 상태 업데이트
-                    if result_cards:
-                        if action == 'recommend': 
-                            st.session_state.shown_theme_ids = set() # 새 추천이면 리셋
-                        
-                        st.session_state.last_filters = used_filters
-                        
-                        # 보여준 ID 저장 (중복 추천 방지)
-                        for key in result_cards:
-                            for c in result_cards[key]:
-                                st.session_state.shown_theme_ids.add(c['id'])
+                st.markdown(reply_text)
+                
+                # 상태 업데이트
+                if result_cards:
+                    if action == 'recommend': 
+                        st.session_state.shown_theme_ids = set()
+                    st.session_state.last_filters = used_filters
+                    for key in result_cards:
+                        for c in result_cards[key]:
+                            st.session_state.shown_theme_ids.add(c['id'])
 
-        # 메시지 기록 저장 (디버그 정보 포함)
         st.session_state.messages.append({
             "role": "assistant", 
             "content": reply_text,
             "cards": result_cards,
-            "debug_info": debug_data if debug_mode else {}
+            "debug_info": debug_data if debug_mode else {},
+            "logs": process_logs # 로그도 기록에 저장
         })
-        st.rerun() # UI 즉시 갱신
+        st.rerun()
 
 if __name__ == "__main__":
     main()
