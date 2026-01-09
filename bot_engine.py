@@ -198,13 +198,19 @@ class EscapeBotEngine:
         final_results = {}
         
         # Rule-Based
+        if on_log: on_log(f"필터 적용: {filters_to_use}, 제외 ID: {len(exclude_ids)}개")
+        
         candidates_rule = self.rule_recommender.search_themes(
             filters_to_use, user_query, limit=3, nicknames=final_context, exclude_ids=exclude_ids, log_func=on_log
         )
         if candidates_rule: final_results['rule_based'] = candidates_rule
 
         # Personalized
+        
         if final_context:
+            if on_log: on_log(f"필터 적용: {filters_to_use}, 제외 ID: {len(exclude_ids)}개")
+            if on_log: on_log(f"exclude_ids:{exclude_ids}")
+            
             candidates_vector = self.vector_recommender.recommend_by_user_search(
                 final_context, limit=3, filters=filters_to_use, exclude_ids=exclude_ids, log_func=on_log
             )
