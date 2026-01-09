@@ -53,6 +53,11 @@ class EscapeBotEngine:
                     tid = int(data.get('ref_id') or doc.id)
                     print(f"   ✅ 찾음: {title} (ID: {tid})")
                     return tid
+                letters = data.get('letters')
+                if target_name in letters.replace(" ", ""):
+                    tid = int(data.get('ref_id') or doc.id)
+                    print(f"   ✅ 찾음: {title} (ID: {tid})")
+                    return tid
             print("   ❌ 찾지 못함")
             return None
         except Exception as e:
