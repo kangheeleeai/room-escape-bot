@@ -8,11 +8,6 @@ class RuleBasedRecommender:
         self.db = db
 
     def search_themes(self, criteria, user_query="", limit=30, nicknames=None, exclude_ids=None):
-        """
-        필터 조건과 유저 쿼리를 기반으로 테마를 검색합니다.
-        - 닉네임이 제공되면 해당 유저(들)의 플레이 기록을 제외합니다.
-        - 사용자 질문의 키워드에 따라 정렬 순서를 조정합니다.
-        """
         print(f"\n🔎 [RuleBased] 검색 시작 | 조건: {criteria}")
         
         played_theme_ids = set()
@@ -38,11 +33,8 @@ class RuleBasedRecommender:
                 for u_doc in user_docs:
                     u_data = u_doc.to_dict()
                     played = u_data.get('played', [])
-                    # played 필드가 리스트 형태라고 가정 (create_user_db.py 로직 따름)
                     for pid in played:
-                        try:
-                            played_theme_ids.add(int(pid))
-                        except: pass
+                        played_theme_ids.add(int(pid))
                     found_count += 1
                 
                 print(f"   -> DB에서 유저 {found_count}명 발견, 총 {len(played_theme_ids)}개 테마 제외 예정")
@@ -118,9 +110,7 @@ class RuleBasedRecommender:
                     'location': data.get('location'),
                     'genre': data.get('genre'),
                     'desc': data.get('description', '')[:150],
-                    # 모든 평점 데이터를 숫자로 변환하여 저장
-                    'rating': float(data.get('satisfyTotalRating') or 0), # satisfyTotalRating을 rating으로 사용
-                    'satisfyTotalRating': float(data.get('satisfyTotalRating') or 0),
+                    'rating': float(data.get('satisfyTotalRating') or 0),
                     'fear': float(data.get('fearTotalRating') or 0),
                     'difficulty': float(data.get('difficultyTotalRating') or 0),
                     'activity': float(data.get('activityTotalRating') or 0),
@@ -150,9 +140,6 @@ class VectorRecommender:
         self.model = model
 
     def get_group_vector(self, nicknames):
-        """
-        주어진 닉네임 리스트에 해당하는 유저들의 벡터를 찾아 평균(Centroid)을 계산합니다.
-        """
         target_users = []
         if isinstance(nicknames, str):
             target_users = [n.strip() for n in nicknames.split(',')]
@@ -167,7 +154,7 @@ class VectorRecommender:
             users_ref = self.db.collection('users')
             if len(target_users) > 10: target_users = target_users[:10]
             
-            # IN 쿼리 사용
+            # IN 쿼리
             query = users_ref.where(filter=FieldFilter("nickname", "in", target_users))
             docs = list(query.stream())
             
@@ -196,7 +183,7 @@ class VectorRecommender:
             matrix = np.array(vectors)
             mean_vector = np.mean(matrix, axis=0)
             
-            # 정규화 (Cosine Similarity용)
+            # 정규화
             norm = np.linalg.norm(mean_vector)
             if norm > 0:
                 mean_vector = mean_vector / norm
@@ -208,16 +195,16 @@ class VectorRecommender:
             return None
 
     def rerank_candidates(self, candidates, user_context):
-        """
-        Rule-Based로 찾은 후보군을 유저(그룹) 벡터와의 유사도 순으로 재정렬합니다.
-        """
         print(f"\n🔄 [Vector] 재정렬(Re-ranking) 시작 | 후보 {len(candidates)}개 | 대상: {user_context}")
         
         # 벡터 생성
-        target_vec = self.get_group_vector(user_context)
+        if isinstance(user_context, list) or (isinstance(user_context, str) and ',' in user_context):
+            target_vec = self.get_group_vector(user_context)
+        else:
+            target_vec = self.get_group_vector([user_context])
 
         if not target_vec:
-            print("   ⚠️ 타겟 벡터 없음. 재정렬 건너뜁니다.")
+            print("   -> 타겟 벡터 없음. 재정렬 건너뜀.")
             return candidates
 
         try:
@@ -254,20 +241,17 @@ class VectorRecommender:
             return candidates
 
     def _execute_vector_search(self, vector, limit=20, filters=None, exclude_ids=None):
-        """
-        Firestore Vector Search 실행 (필터 및 제외 ID 처리 포함)
-        """
-        print("\n🚀 [Vector] DB 벡터 유사도 검색 실행")
         themes_ref = self.db.collection('themes')
         query = themes_ref
         
         if filters and filters.get('location'):
             query = query.where(filter=FieldFilter("location", "==", filters['location']))
-            print(f"   📌 벡터 검색 필터: {filters['location']}")
 
         try:
             # 제외할 개수만큼 더 가져옴
             fetch_limit = limit + len(exclude_ids) if exclude_ids else limit
+            
+            print(f"\n🚀 [Vector] DB 벡터 검색 실행 (Limit: {fetch_limit})")
             
             vector_query = query.find_nearest(
                 vector_field="embedding_field",
@@ -275,14 +259,12 @@ class VectorRecommender:
                 distance_measure=DistanceMeasure.COSINE,
                 limit=fetch_limit
             )
-            
-            # 쿼리 실행
-            docs = vector_query.get()
-            print(f"   📦 벡터 검색 결과: {len(docs)}개 가져옴")
-            
             results = []
+            docs = vector_query.get()
+            
+            print(f"   -> DB 반환 문서 수: {len(docs)}개")
+            
             for doc in docs:
-                # 제외 목록 체크
                 if exclude_ids and doc.id in exclude_ids:
                     continue
                     
@@ -307,9 +289,8 @@ class VectorRecommender:
                 if len(results) >= limit:
                     break
             
-            print(f"   ✅ 최종 유효 벡터 결과: {len(results)}개")
+            print(f"   ✅ 최종 유효 결과: {len(results)}개")
             return results
-
         except Exception as e:
             print(f"   ❌ [Error] Vector Search 실패: {e}")
             if "Missing vector index configuration" in str(e):
@@ -323,8 +304,12 @@ class VectorRecommender:
         return self._execute_vector_search(query_vector, filters=filters, exclude_ids=exclude_ids)
 
     def recommend_by_user_search(self, user_context, limit=3, filters=None, exclude_ids=None):
-        """[NEW] DB에서 유저(그룹) 벡터로 직접 검색"""
-        target_vec = self.get_group_vector(user_context)
+        # 유저 벡터 가져오기
+        if isinstance(user_context, list) or (isinstance(user_context, str) and ',' in user_context):
+            target_vec = self.get_group_vector(user_context)
+        else:
+            target_vec = self.get_group_vector([user_context])
+            
         if not target_vec: return []
         
         print("🚀 [UserVector] 유저 벡터로 DB 검색 실행")
