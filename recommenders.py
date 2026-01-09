@@ -121,7 +121,7 @@ class VectorRecommender:
 
     def _execute_vector_search(self, vector, limit=20, filters=None, exclude_ids=None, log_func=None):
         try:
-            fetch_limit = limit + (len(exclude_ids) if exclude_ids else 0) + 10
+            fetch_limit = limit + (len(exclude_ids) if exclude_ids else 0) + 20
             themes_ref = self.db.collection('themes')
             
             vector_query = themes_ref.find_nearest(
@@ -169,6 +169,5 @@ class VectorRecommender:
     def recommend_by_user_search(self, user_context, limit=3, filters=None, exclude_ids=None, log_func=None):
         if log_func: log_func(f"[Person] '{user_context}' 그룹 취향 분석")
         target_vec = self.get_group_vector(user_context, log_func)
-        if log_func: log_func(f"[vector] '{target_vec}'")
         if not target_vec: return []
         return self._execute_vector_search(target_vec, limit=limit, filters=filters, exclude_ids=exclude_ids, log_func=log_func)
