@@ -123,6 +123,8 @@ class VectorRecommender:
         try:
             fetch_limit = limit + (len(exclude_ids) if exclude_ids else 0) + 20
             themes_ref = self.db.collection('themes')
+            if fetch_limit < 500:
+                fetch_limit = 500
             if log_func: log_func(f"[fetch_limit, exclude_ids] '{fetch_limit}', '{exclude_ids}")
             
             
