@@ -69,6 +69,8 @@ def render_cards(card_list):
     for item in card_list:
         # 설명이 없으면 빈 문자열 처리
         desc = item.get('desc', '')
+        # [Fix] rating 변수 정의 (딕셔너리에서 안전하게 가져오기)
+        rating = item.get('rating', 0.0)
 
         # 설명 길이 제한
         if len(desc) > 100:
