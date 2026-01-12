@@ -8,7 +8,11 @@ class RuleBasedRecommender:
         self.db = db
 
     def search_themes(self, criteria, user_query="", limit=30, nicknames=None, exclude_ids=None, log_func=None):
-        if log_func: log_func(f"[Rule] 검색 시작 (지역: {criteria.get('location', '전체')})")
+        # locations 리스트 가져오기 (없으면 빈 리스트)
+        locs_input = criteria.get('locations', [])
+        loc_str_log = ", ".join(locs_input) if locs_input else "전체"
+        
+        if log_func: log_func(f"[Rule] 검색 시작 (지역: {loc_str_log})")
         
         played_theme_ids = set()
         
@@ -39,12 +43,13 @@ class RuleBasedRecommender:
 
         # 2. DB 쿼리
         themes_ref = self.db.collection('themes')
-        # RuleBased는 평점순 정렬이 기본
         query = themes_ref.order_by('satisfyTotalRating', direction=firestore.Query.DESCENDING).limit(200)
 
         docs = list(query.stream())
         raw_candidates = []
-        loc_input = criteria.get('location', '').replace(" ", "") if criteria.get('location') else ""
+        
+        # 공백 제거한 검색용 지역 리스트 생성
+        clean_locs = [loc.replace(" ", "") for loc in locs_input if loc.strip()]
 
         for doc in docs:
             data = doc.to_dict()
@@ -56,10 +61,13 @@ class RuleBasedRecommender:
             except: 
                 if doc.id in total_exclude_ids: continue
 
-            # 지역 필터
-            if loc_input:
+            # [다중 지역 필터링]
+            # 입력된 지역 목록(clean_locs)이 있으면, DB 주소에 그 중 하나라도 포함되어야 함 (OR 조건)
+            if clean_locs:
                 db_loc = f"{data.get('location', '')} {data.get('store_name', '')}".replace(" ", "")
-                if loc_input not in db_loc: continue
+                # any()를 사용하여 하나라도 일치하면 True
+                if not any(target in db_loc for target in clean_locs):
+                    continue
 
             # 벡터 저장
             vec_obj = data.get('embedding_field')
@@ -121,7 +129,6 @@ class VectorRecommender:
             return None
 
     def _get_played_ids_internal(self, user_context, log_func=None):
-        """RuleBasedRecommender와 동일한 방식으로 플레이 이력을 조회"""
         played_ids = set()
         if not user_context: return played_ids
         
@@ -136,7 +143,6 @@ class VectorRecommender:
         try:
             users_ref = self.db.collection('users')
             if len(target_users) > 10: target_users = target_users[:10]
-            # IN query
             user_q = users_ref.where(filter=FieldFilter("nickname", "in", target_users))
             docs = user_q.stream()
             for doc in docs:
@@ -150,49 +156,44 @@ class VectorRecommender:
         return played_ids
 
     def _execute_vector_search(self, vector, limit=20, filters=None, exclude_ids=None, log_func=None):
-        """
-        [수정된 로직]
-        1. 지역 기준(또는 전체)으로 테마 로드
-        2. 제외 ID 필터링
-        3. 메모리 상에서 Cosine 유사도 계산 및 정렬
-        """
         try:
             themes_ref = self.db.collection('themes')
             query = themes_ref
             
-            # 1. 지역 기준 로드 (DB 필터)
-            loc_filter = filters.get('location') if filters else None
+            # [다중 지역 필터 로직 준비]
+            locs_input = filters.get('locations', []) if filters else []
+            clean_locs = [loc.replace(" ", "") for loc in locs_input if loc.strip()]
             
-            # 제한 없이 전체 로드 (전수 조사)
+            # 제한 없이 전체 로드 (메모리 필터링)
             docs = list(query.stream())
             
             candidates = []
-            
-            # 타겟 벡터 정규화 (유사도 계산용)
             target_vec = np.array(vector)
             target_norm = np.linalg.norm(target_vec)
             
-            loc_input = loc_filter.replace(" ", "") if loc_filter else ""
             total_exclude_ids = set(exclude_ids) if exclude_ids else set()
 
             for doc in docs:
                 data = doc.to_dict()
                 
-                # 2. 제외 ID 필터링
+                # 제외 ID 필터링
                 try:
                     tid = int(data.get('ref_id') or doc.id)
                     if tid in total_exclude_ids or str(tid) in total_exclude_ids: continue
                 except:
                     if doc.id in total_exclude_ids: continue
 
-                # 지역 필터 (메모리 유연 검색)
-                if loc_input:
+                # [다중 지역 필터]
+                # 리스트에 지역이 하나라도 있다면 검사
+                if clean_locs:
                     db_loc = f"{data.get('location', '')} {data.get('store_name', '')}".replace(" ", "")
-                    if loc_input not in db_loc: continue
+                    # OR 조건: 입력 지역 중 하나라도 포함되면 통과
+                    if not any(target in db_loc for target in clean_locs):
+                        continue
                 
                 # 벡터 유사도 계산
                 vec_obj = data.get('embedding_field')
-                if not vec_obj: continue # 벡터 없으면 패스
+                if not vec_obj: continue
                 
                 try:
                     theme_vec = vec_obj.to_map()['value'] if hasattr(vec_obj, 'to_map') else list(vec_obj)
@@ -215,7 +216,6 @@ class VectorRecommender:
                     'rating': float(data.get('satisfyTotalRating') or 0),
                     'fear': float(data.get('fearTotalRating') or 0),
                     'difficulty': float(data.get('difficultyTotalRating') or 0),
-                    # 재정렬 시 필요한 추가 속성들 (utils.py 참조)
                     'activity': float(data.get('activityTotalRating') or 0),
                     'problem': float(data.get('problemTotalRating') or 0),
                     'story': float(data.get('storyTotalRating') or 0),
@@ -224,7 +224,6 @@ class VectorRecommender:
                     'score': score
                 })
 
-            # 3. 유사도 정렬
             candidates.sort(key=lambda x: x['score'], reverse=True)
             
             if log_func: log_func(f"   -> [Vector] {len(candidates)}개 후보 중 Top {limit} 추출")
@@ -235,32 +234,25 @@ class VectorRecommender:
             return []
 
     def recommend_by_text(self, query_text, filters=None, exclude_ids=None, log_func=None):
-        """텍스트 기반 검색 (이력 제외는 외부 exclude_ids에 의존)"""
         if not self.model: return []
         if log_func: log_func(f"[Text] '{query_text}' 임베딩 검색 시작")
         query_vector = self.model.encode(query_text).tolist()
         return self._execute_vector_search(query_vector, limit=10, filters=filters, exclude_ids=exclude_ids, log_func=log_func)
 
     def recommend_by_user_search(self, user_context, user_query="", limit=3, filters=None, exclude_ids=None, log_func=None):
-        """유저/그룹 벡터 검색 (내부에서 이력 조회하여 추가 제외) + 키워드 반영"""
         if log_func: log_func(f"[Person] '{user_context}' 벡터 분석 (키워드: '{user_query}')")
         
-        # 1. 그룹 벡터 계산
         target_vec = self.get_group_vector(user_context, log_func)
         if not target_vec: return []
         
-        # 2. 이력 조회 및 병합
         played_ids = self._get_played_ids_internal(user_context, log_func)
         final_exclude = set(exclude_ids) if exclude_ids else set()
         final_exclude.update(played_ids)
         
-        # 3. 검색 실행 (키워드 반영을 위해 후보군을 넉넉히 가져옴)
-        # 키워드가 있다면 limit의 5배수를 가져와서 재정렬 후 상위 n개 선택
         fetch_limit = limit * 5 if user_query else limit
         
         candidates = self._execute_vector_search(target_vec, limit=fetch_limit, filters=filters, exclude_ids=final_exclude, log_func=log_func)
         
-        # 4. 키워드 기반 재정렬 (Reranking)
         if user_query and candidates:
             candidates = sort_candidates_by_query(candidates, user_query)
             if log_func: log_func(f"   -> [Re-rank] 키워드('{user_query}') 반영하여 재정렬 완료")
