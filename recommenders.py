@@ -43,7 +43,8 @@ class RuleBasedRecommender:
 
         # 2. DB 쿼리
         themes_ref = self.db.collection('themes')
-        query = themes_ref.order_by('satisfyTotalRating', direction=firestore.Query.DESCENDING).limit(200)
+        # firestore.Query.DESCENDING 대신 문자열 "DESCENDING" 사용 (호환성 개선)
+        query = themes_ref.order_by('satisfyTotalRating', direction="DESCENDING").limit(200)
 
         docs = list(query.stream())
         raw_candidates = []
