@@ -24,7 +24,7 @@ st.set_page_config(page_title="방탈출 AI 코난 (Hybrid)", page_icon="🕵️
 st.markdown("""
 <style>
     .theme-card {
-        background-color: #f9f9f9; /* 밝은 회색으로 변경 */
+        background-color: #f0f2f6; /* 회색으로 변경 (기존 #f9f9f9 -> #f0f2f6) */
         padding: 15px;
         border-radius: 10px;
         margin-bottom: 10px;
@@ -64,7 +64,7 @@ def render_cards(card_list):
         # 설명이 없으면 빈 문자열 처리
         desc = item.get('desc', '')
         
-        # 설명이 너무 길면 자르고 ... 붙이기 (100자 제한)
+        # 설명 길이 제한
         if len(desc) > 100:
             desc = desc[:100] + "..."
         
