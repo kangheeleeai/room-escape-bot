@@ -146,7 +146,8 @@ class EscapeBotEngine:
             if not user_context:
                 return "⚠️ 닉네임을 먼저 설정해주세요.", {}, {}, action, debug_info
             
-            items = intent_data.get('items', [])
+            # [Fix] items가 null일 경우 빈 리스트로 처리
+            items = intent_data.get('items') or []
             if not items and intent_data.get('theme'):
                 items.append({"location": intent_data.get('location'), "theme": intent_data.get('theme')})
 
@@ -168,10 +169,11 @@ class EscapeBotEngine:
             return "\n".join(results_msg), {}, {}, action, debug_info
 
         # 3. 필터 설정
+        # [Fix] LLM이 null을 반환할 경우를 대비하여 (or [])로 안전하게 처리
         current_filters = {
             'location': intent_data.get('location'),
-            'keywords': intent_data.get('keywords', []),
-            'mentioned_users': intent_data.get('mentioned_users', [])
+            'keywords': intent_data.get('keywords') or [],
+            'mentioned_users': intent_data.get('mentioned_users') or []
         }
         
         # 유저 처리
@@ -237,7 +239,7 @@ class EscapeBotEngine:
         display_name = user_context if user_context else "회원"
 
         response_text = f"{topic_str} 방탈출을 추천해드릴게요!\n\n" \
-                        f"맞춤 추천은 **{display_name}**님이 빠방에 작성한 리뷰를 기준으로 가까운 테마를 추천하고\n\n" \
+                        f"맞춤 추천은 **{display_name}**님이 빠방에 작성한 리뷰를 기준으로 가까운 테마를 추천하고\n" \
                         f"조건 추천은 **{display_name}**님이 방금 말씀하신 조건을 필터링해 추천해 드려요!"
 
         return response_text, final_results, filters_to_use, action, debug_info
