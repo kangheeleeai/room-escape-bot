@@ -193,11 +193,11 @@ class EscapeBotEngine:
             exclude_ids = []
 
         if on_log: on_log(f"필터 적용: {filters_to_use}, 제외 ID: {len(exclude_ids)}개")
-        save_exclude_ids_count = len(exclude_ids)
+
         # 4. 추천 실행
         final_results = {}
         
-        # Rule-Based        
+        # Rule-Based
         candidates_rule = self.rule_recommender.search_themes(
             filters_to_use, user_query, limit=3, nicknames=final_context, exclude_ids=exclude_ids, log_func=on_log
         )
@@ -206,11 +206,11 @@ class EscapeBotEngine:
         # Personalized
         if final_context:
             candidates_vector = self.vector_recommender.recommend_by_user_search(
-                final_context, limit=3, filters=filters_to_use, exclude_ids=save_exclude_ids_count, log_func=on_log
+                final_context, user_query=user_query, limit=3, filters=filters_to_use, exclude_ids=exclude_ids, log_func=on_log
             )
             if candidates_vector:
-                final_reranked = sort_candidates_by_query(candidates_vector, user_query)
-                final_results['personalized'] = final_reranked
+                # recommend_by_user_search 내부에서 이미 정렬하므로 그대로 사용
+                final_results['personalized'] = candidates_vector
 
         # Fallback
         if not final_results:
@@ -222,18 +222,22 @@ class EscapeBotEngine:
             else:
                 return "조건에 맞는 테마를 찾지 못했습니다.", {}, filters_to_use, action, debug_info
 
-        # LLM 설명 생성
-        if on_log: on_log("📝 최종 답변 생성 중 (LLM)...")
+        # 5. [수정됨] LLM 설명 대신 고정 템플릿 답변 생성
+        if on_log: on_log("📝 답변 생성 중 (Fixed Template)...")
         
-        context_str = ""
-        for k, v in final_results.items():
-            context_str += f"\n[{k}]\n" + "\n".join([f"- {i['title']}" for i in v])
+        # 토픽 문자열 구성 (예: "강남 공포")
+        loc_str = intent_data.get('location') or ""
+        keywords = intent_data.get('keywords', [])
+        kws_str = " ".join(keywords) if isinstance(keywords, list) else str(keywords)
+        topic_str = f"{loc_str} {kws_str}".strip()
+        if not topic_str: 
+            topic_str = "요청하신"
 
-        system_prompt = f"""
-        당신은 방탈출 추천 AI입니다. 질문: "{user_query}"
-        [추천 목록] {context_str}
-        위 목록에서 2~3개를 골라 친절하게 추천해주세요.
-        """
-        response_text = self._call_llm(system_prompt) or "답변 생성 오류"
+        # 닉네임 (없으면 '회원'으로 표시)
+        display_name = user_context if user_context else "회원"
+
+        response_text = f"{topic_str} 방탈출을 추천해드릴게요!\n\n" \
+                        f"맞춤 추천은 **{display_name}**님이 빠방에 작성한 리뷰를 기준으로 가까운 테마를 추천하고\n" \
+                        f"조건 추천은 **{display_name}**님이 방금 말씀하신 조건을 필터링해 추천해 드려요!"
 
         return response_text, final_results, filters_to_use, action, debug_info
