@@ -235,7 +235,7 @@ def main():
             "role": "assistant", 
             "content": reply_text,
             "cards": result_cards,
-            "debug_info": debug_data if debug_mode else {},
+            # "debug_info": debug_data if debug_mode else {},
             "logs": process_logs
         })
         st.rerun()
