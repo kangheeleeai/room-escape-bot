@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-st.set_page_config(page_title="방탈출 AI 코난 (Hybrid)", page_icon="🕵️", layout="wide")
+st.set_page_config(page_title="방탈출 AI (Hybrid)", page_icon="🕵️", layout="wide")
 
 # CSS 스타일 (카드 디자인)
 st.markdown("""
@@ -45,7 +45,7 @@ st.markdown("""
 def show_guide():
     """사용자 가이드 페이지"""
     st.markdown("""
-    ## 🕵️ 방탈출 AI 코난 사용 설명서
+    ## 🕵️ 방탈출 AI 사용 설명서
     
     ### 1️⃣ 기본 추천
     * "강남 공포 테마 추천해줘"
@@ -93,7 +93,7 @@ def main():
         
         st.subheader("👥 플레이어 정보")
         my_name = st.text_input("내 닉네임", placeholder="예: 코난", key="my_name_input")
-        group_names = st.text_input("같이 할 멤버 (옵션)", placeholder="예: 미란이, 장미", key="group_names_input")
+        group_names = st.text_input("같이 할 멤버 (옵션)", placeholder="예: 김전일, L", key="group_names_input")
         
         nickname = my_name.strip()
         if group_names:
@@ -105,7 +105,7 @@ def main():
             st.info("닉네임을 입력하면 맞춤 추천이 가능합니다.")
             
         st.divider()
-        debug_mode = st.toggle("🐛 디버그 모드", value=False, help="봇의 의도 분석 결과와 필터 정보를 보여줍니다.")
+        # debug_mode = st.toggle("🐛 디버그 모드", value=False, help="봇의 의도 분석 결과와 필터 정보를 보여줍니다.")
         
         if st.button("🗑️ 대화 초기화"):
             st.session_state.messages = []
@@ -118,8 +118,8 @@ def main():
         return
 
     # --- 메인 챗봇 화면 ---
-    st.title("🕵️ 방탈출 AI 코난")
-    st.caption("Hybrid Recommender System (Rule-based + Vector)")
+    st.title("🕵️ 방탈출 AI")
+    st.caption("Hybrid Recommender System")
 
     # Session State 초기화
     if "messages" not in st.session_state:
@@ -150,13 +150,13 @@ def main():
             debug_info = msg.get("debug_info", {})
             logs = msg.get("logs", [])
 
-            if logs:
-                with st.expander("📜 처리 과정 로그 보기"):
-                    for l in logs:
-                        st.text(l)
+            # if logs:
+            #     with st.expander("📜 처리 과정 로그 보기"):
+            #         for l in logs:
+            #             st.text(l)
 
             if cards:
-                # [UI 보완] 탭 구성
+                # 탭 구성
                 tab1, tab2 = st.tabs(["🎯 맞춤 추천", "🔎 조건 추천"])
                 
                 with tab1:
@@ -170,7 +170,7 @@ def main():
                     # Rule-based 결과 표시
                     rule_list = cards.get('rule_based', [])
                     
-                    # [중요] 3번째 탭을 없앴으므로, Fallback(유사검색) 결과를 여기에 합쳐서 보여줌
+                    # Fallback(유사검색) 결과를 여기에 합쳐서 보여줌
                     if not rule_list and 'text_search' in cards:
                         st.info("조건에 딱 맞는 테마가 없어 유사한 테마를 보여드립니다.")
                         rule_list = cards['text_search']
@@ -195,13 +195,13 @@ def main():
                 st.error("API Key가 설정되지 않았습니다.")
             else:
                 process_logs = []
-                with st.status("🕵️ 코난이 추리 중입니다...", expanded=True) as status:
+                with st.status("🕵️ 테마를 추리 중입니다...", expanded=True) as status:
                     
                     # 로그 콜백
-                    def ui_logger(msg):
-                        st.write(f"🔹 {msg}")
-                        process_logs.append(msg)
-                        logger.info(msg)
+                    # def ui_logger(msg):
+                    #     st.write(f"🔹 {msg}")
+                    #     process_logs.append(msg)
+                    #     logger.info(msg)
 
                     session_ctx = {
                         'shown_ids': st.session_state.shown_theme_ids,
