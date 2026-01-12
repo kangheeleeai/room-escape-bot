@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-st.set_page_config(page_title="방탈출 AI (Hybrid)", page_icon="🕵️", layout="wide")
+st.set_page_config(page_title="방탈출 AI 코난 (Hybrid)", page_icon="🕵️", layout="wide")
 
 # CSS 스타일 (카드 디자인)
 st.markdown("""
@@ -45,7 +45,7 @@ st.markdown("""
 def show_guide():
     """사용자 가이드 페이지"""
     st.markdown("""
-    ## 🕵️ 방탈출 AI 사용 설명서
+    ## 🕵️ 방탈출 AI 코난 사용 설명서
     
     ### 1️⃣ 기본 추천
     * "강남 공포 테마 추천해줘"
@@ -69,16 +69,18 @@ def render_cards(card_list):
     for item in card_list:
         # 설명이 없으면 빈 문자열 처리
         desc = item.get('desc', '')
-
-        # 설명 길이 제한
-        if len(desc) > 100:
-            desc = desc[:100] + "..."
         
+        # 평점 소수점 2자리 포맷팅 (값이 없으면 0.0)
+        try:
+            rating = float(item.get('rating', 0) or 0)
+        except:
+            rating = 0.0
+
         # white-space: pre-wrap을 적용하여 줄바꿈을 유지하고 텍스트가 영역을 넘어갈 때 자동 줄바꿈되도록 함
         st.markdown(f"""
         <div class='theme-card'>
             <div class='theme-title'>{item['title']} <span style='font-size:0.8em; color:black'>({item['store']})</span></div>
-            <div class='theme-meta'>⭐ 평점: {item['rating']} | 📍 {item['location']}</div>
+            <div class='theme-meta'>⭐ 평점: {rating:.2f} | 📍 {item['location']}</div>
             <hr style="margin: 8px 0; opacity: 0.2;">
             <div class='theme-desc' style='white-space: pre-wrap; line-height: 1.5;'>{desc}</div>
         </div>
@@ -93,7 +95,7 @@ def main():
         
         st.subheader("👥 플레이어 정보")
         my_name = st.text_input("내 닉네임", placeholder="예: 코난", key="my_name_input")
-        group_names = st.text_input("같이 할 멤버 (옵션)", placeholder="예: 김전일, L", key="group_names_input")
+        group_names = st.text_input("같이 할 멤버 (옵션)", placeholder="예: 미란이, 장미", key="group_names_input")
         
         nickname = my_name.strip()
         if group_names:
@@ -105,7 +107,7 @@ def main():
             st.info("닉네임을 입력하면 맞춤 추천이 가능합니다.")
             
         st.divider()
-        # debug_mode = st.toggle("🐛 디버그 모드", value=False, help="봇의 의도 분석 결과와 필터 정보를 보여줍니다.")
+        debug_mode = st.toggle("🐛 디버그 모드", value=False, help="봇의 의도 분석 결과와 필터 정보를 보여줍니다.")
         
         if st.button("🗑️ 대화 초기화"):
             st.session_state.messages = []
@@ -118,8 +120,8 @@ def main():
         return
 
     # --- 메인 챗봇 화면 ---
-    st.title("🕵️ 방탈출 AI")
-    st.caption("Hybrid Recommender System")
+    st.title("🕵️ 방탈출 AI 코난")
+    st.caption("Hybrid Recommender System (Rule-based + Vector)")
 
     # Session State 초기화
     if "messages" not in st.session_state:
@@ -150,13 +152,13 @@ def main():
             debug_info = msg.get("debug_info", {})
             logs = msg.get("logs", [])
 
-            # if logs:
-            #     with st.expander("📜 처리 과정 로그 보기"):
-            #         for l in logs:
-            #             st.text(l)
+            if logs:
+                with st.expander("📜 처리 과정 로그 보기"):
+                    for l in logs:
+                        st.text(l)
 
             if cards:
-                # 탭 구성
+                # [UI 보완] 탭 구성
                 tab1, tab2 = st.tabs(["🎯 맞춤 추천", "🔎 조건 추천"])
                 
                 with tab1:
@@ -170,7 +172,7 @@ def main():
                     # Rule-based 결과 표시
                     rule_list = cards.get('rule_based', [])
                     
-                    # Fallback(유사검색) 결과를 여기에 합쳐서 보여줌
+                    # [중요] 3번째 탭을 없앴으므로, Fallback(유사검색) 결과를 여기에 합쳐서 보여줌
                     if not rule_list and 'text_search' in cards:
                         st.info("조건에 딱 맞는 테마가 없어 유사한 테마를 보여드립니다.")
                         rule_list = cards['text_search']
@@ -180,9 +182,9 @@ def main():
                     else:
                         st.caption("검색 결과가 없습니다.")
             
-            # if debug_mode and debug_info:
-            #     with st.expander("🛠️ 디버그 정보"):
-            #         st.json(debug_info)
+            if debug_mode and debug_info:
+                with st.expander("🛠️ 디버그 정보"):
+                    st.json(debug_info)
 
     # 사용자 입력 처리
     if prompt := st.chat_input("메시지를 입력하세요..."):
@@ -195,13 +197,13 @@ def main():
                 st.error("API Key가 설정되지 않았습니다.")
             else:
                 process_logs = []
-                with st.status("🕵️ 테마를 추리 중입니다...", expanded=True) as status:
+                with st.status("🕵️ 코난이 추리 중입니다...", expanded=True) as status:
                     
                     # 로그 콜백
-                    # def ui_logger(msg):
-                    #     st.write(f"🔹 {msg}")
-                    #     process_logs.append(msg)
-                    #     logger.info(msg)
+                    def ui_logger(msg):
+                        st.write(f"🔹 {msg}")
+                        process_logs.append(msg)
+                        logger.info(msg)
 
                     session_ctx = {
                         'shown_ids': st.session_state.shown_theme_ids,
@@ -213,7 +215,7 @@ def main():
                         prompt, 
                         user_context=nickname,
                         session_context=session_ctx,
-                        # on_log=ui_logger
+                        on_log=ui_logger
                     )
                     
                     status.update(label="추리 완료!", state="complete", expanded=False)
@@ -235,7 +237,7 @@ def main():
             "role": "assistant", 
             "content": reply_text,
             "cards": result_cards,
-            # "debug_info": debug_data if debug_mode else {},
+            "debug_info": debug_data if debug_mode else {},
             "logs": process_logs
         })
         st.rerun()
