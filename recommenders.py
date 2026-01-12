@@ -161,14 +161,7 @@ class VectorRecommender:
             query = themes_ref
             
             # 1. 지역 기준 로드 (DB 필터)
-            # 정확한 지역명이 있으면 DB에서 1차 필터링하여 성능 최적화
             loc_filter = filters.get('location') if filters else None
-            if loc_filter:
-                # Firestore에서는 정확한 일치만 where로 가능. 
-                # (예: "강남" 입력 시 DB에 "강남"이어야 함. "서울 강남구"면 못 찾음)
-                # 데이터가 정규화되어 있지 않다면 전체 로드 후 메모리 필터링이 안전함.
-                # 여기서는 '전체 로드' 전략 사용 (데이터가 아주 많지 않다고 가정)
-                pass 
             
             # 제한 없이 전체 로드 (전수 조사)
             docs = list(query.stream())
@@ -222,6 +215,12 @@ class VectorRecommender:
                     'rating': float(data.get('satisfyTotalRating') or 0),
                     'fear': float(data.get('fearTotalRating') or 0),
                     'difficulty': float(data.get('difficultyTotalRating') or 0),
+                    # 재정렬 시 필요한 추가 속성들 (utils.py 참조)
+                    'activity': float(data.get('activityTotalRating') or 0),
+                    'problem': float(data.get('problemTotalRating') or 0),
+                    'story': float(data.get('storyTotalRating') or 0),
+                    'interior': float(data.get('interiorTotalRating') or 0),
+                    'act': float(data.get('actTotalRating') or 0),
                     'score': score
                 })
 
@@ -242,9 +241,9 @@ class VectorRecommender:
         query_vector = self.model.encode(query_text).tolist()
         return self._execute_vector_search(query_vector, limit=10, filters=filters, exclude_ids=exclude_ids, log_func=log_func)
 
-    def recommend_by_user_search(self, user_context, limit=3, filters=None, exclude_ids=None, log_func=None):
-        """유저/그룹 벡터 검색 (내부에서 이력 조회하여 추가 제외)"""
-        if log_func: log_func(f"[Person] '{user_context}' 그룹 벡터 분석")
+    def recommend_by_user_search(self, user_context, user_query="", limit=3, filters=None, exclude_ids=None, log_func=None):
+        """유저/그룹 벡터 검색 (내부에서 이력 조회하여 추가 제외) + 키워드 반영"""
+        if log_func: log_func(f"[Person] '{user_context}' 벡터 분석 (키워드: '{user_query}')")
         
         # 1. 그룹 벡터 계산
         target_vec = self.get_group_vector(user_context, log_func)
@@ -255,5 +254,15 @@ class VectorRecommender:
         final_exclude = set(exclude_ids) if exclude_ids else set()
         final_exclude.update(played_ids)
         
-        # 3. 검색 실행
-        return self._execute_vector_search(target_vec, limit=limit, filters=filters, exclude_ids=final_exclude, log_func=log_func)
+        # 3. 검색 실행 (키워드 반영을 위해 후보군을 넉넉히 가져옴)
+        # 키워드가 있다면 limit의 5배수를 가져와서 재정렬 후 상위 n개 선택
+        fetch_limit = limit * 5 if user_query else limit
+        
+        candidates = self._execute_vector_search(target_vec, limit=fetch_limit, filters=filters, exclude_ids=final_exclude, log_func=log_func)
+        
+        # 4. 키워드 기반 재정렬 (Reranking)
+        if user_query and candidates:
+            candidates = sort_candidates_by_query(candidates, user_query)
+            if log_func: log_func(f"   -> [Re-rank] 키워드('{user_query}') 반영하여 재정렬 완료")
+            
+        return candidates[:limit]
