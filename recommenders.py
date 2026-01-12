@@ -8,11 +8,14 @@ class RuleBasedRecommender:
         self.db = db
 
     def search_themes(self, criteria, user_query="", limit=30, nicknames=None, exclude_ids=None, log_func=None):
-        # locations 리스트 가져오기 (없으면 빈 리스트)
         locs_input = criteria.get('locations', [])
         loc_str_log = ", ".join(locs_input) if locs_input else "전체"
         
-        if log_func: log_func(f"[Rule] 검색 시작 (지역: {loc_str_log})")
+        # [수정] 평점 조건 로깅
+        min_rating = criteria.get('min_rating')
+        rating_log = f", 최소평점 {min_rating}" if min_rating else ""
+        
+        if log_func: log_func(f"[Rule] 검색 시작 (지역: {loc_str_log}{rating_log})")
         
         played_theme_ids = set()
         
@@ -43,13 +46,13 @@ class RuleBasedRecommender:
 
         # 2. DB 쿼리
         themes_ref = self.db.collection('themes')
-        # firestore.Query.DESCENDING 대신 문자열 "DESCENDING" 사용 (호환성 개선)
+        # 평점 조건이 아주 높으면(4.5 이상) 쿼리 단계에서부터 줄일 수도 있지만, 
+        # 여기서는 유연성을 위해 메모리 필터링을 사용합니다.
         query = themes_ref.order_by('satisfyTotalRating', direction="DESCENDING").limit(200)
 
         docs = list(query.stream())
         raw_candidates = []
         
-        # 공백 제거한 검색용 지역 리스트 생성
         clean_locs = [loc.replace(" ", "") for loc in locs_input if loc.strip()]
 
         for doc in docs:
@@ -62,13 +65,20 @@ class RuleBasedRecommender:
             except: 
                 if doc.id in total_exclude_ids: continue
 
-            # [다중 지역 필터링]
-            # 입력된 지역 목록(clean_locs)이 있으면, DB 주소에 그 중 하나라도 포함되어야 함 (OR 조건)
+            # [지역 필터링]
             if clean_locs:
-                db_loc = f"{data.get('location', '')} {data.get('store_name', '')}".replace(" ", "")
-                # any()를 사용하여 하나라도 일치하면 True
+                db_loc = data.get('location', '').replace(" ", "")
                 if not any(target in db_loc for target in clean_locs):
                     continue
+
+            # [수정] 평점 필터링 (Rating Filter)
+            # satisfyTotalRating은 보통 0.0 ~ 5.0 사이의 실수
+            try:
+                rating = float(data.get('satisfyTotalRating') or 0)
+                if min_rating and rating < float(min_rating):
+                    continue
+            except:
+                pass
 
             # 벡터 저장
             vec_obj = data.get('embedding_field')
@@ -161,8 +171,9 @@ class VectorRecommender:
             themes_ref = self.db.collection('themes')
             query = themes_ref
             
-            # [다중 지역 필터 로직 준비]
             locs_input = filters.get('locations', []) if filters else []
+            min_rating = filters.get('min_rating') if filters else None
+            
             clean_locs = [loc.replace(" ", "") for loc in locs_input if loc.strip()]
             
             # 제한 없이 전체 로드 (메모리 필터링)
@@ -184,13 +195,19 @@ class VectorRecommender:
                 except:
                     if doc.id in total_exclude_ids: continue
 
-                # [다중 지역 필터]
-                # 리스트에 지역이 하나라도 있다면 검사
+                # [지역 필터]
                 if clean_locs:
-                    db_loc = f"{data.get('location', '')} {data.get('store_name', '')}".replace(" ", "")
-                    # OR 조건: 입력 지역 중 하나라도 포함되면 통과
+                    db_loc = data.get('location', '').replace(" ", "")
                     if not any(target in db_loc for target in clean_locs):
                         continue
+
+                # [수정] 평점 필터링 추가
+                try:
+                    rating = float(data.get('satisfyTotalRating') or 0)
+                    if min_rating and rating < float(min_rating):
+                        continue
+                except:
+                    pass
                 
                 # 벡터 유사도 계산
                 vec_obj = data.get('embedding_field')
