@@ -24,7 +24,7 @@ st.set_page_config(page_title="방탈출 AI 코난 (Hybrid)", page_icon="🕵️
 st.markdown("""
 <style>
     .theme-card {
-        background-color: #f0f2f6; /* 회색으로 변경 (기존 #f9f9f9 -> #f0f2f6) */
+        background-color: #f0f2f6;
         padding: 15px;
         border-radius: 10px;
         margin-bottom: 10px;
@@ -71,7 +71,7 @@ def render_cards(card_list):
         # white-space: pre-wrap을 적용하여 줄바꿈을 유지하고 텍스트가 영역을 넘어갈 때 자동 줄바꿈되도록 함
         st.markdown(f"""
         <div class='theme-card'>
-            <div class='theme-title'>{item['title']} <span style='font-size:0.8em; color:black'>({item['store']})</span></div>
+            <div class='theme-title'; color:black>{item['title']} <span style='font-size:0.8em; color:black'>({item['store']})</span></div>
             <div class='theme-meta'>⭐ 평점: {item['rating']} | 📍 {item['location']}</div>
             <hr style="margin: 8px 0; opacity: 0.2;">
             <div class='theme-desc' style='white-space: pre-wrap; line-height: 1.5;'>{desc}</div>
