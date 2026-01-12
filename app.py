@@ -24,13 +24,19 @@ st.set_page_config(page_title="방탈출 AI 코난 (Hybrid)", page_icon="🕵️
 st.markdown("""
 <style>
     .theme-card {
-        background-color: #f0f2f6;
+        background-color: #ffffff; /* 흰색 배경으로 변경 */
         padding: 15px;
         border-radius: 10px;
         margin-bottom: 10px;
         border-left: 5px solid #ff4b4b;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05); /* 흰색 배경 구분을 위한 옅은 그림자 */
+        border: 1px solid #f0f0f0; /* 옅은 테두리 추가 */
     }
-    .theme-title { font-weight: bold; font-size: 1.1em; }
+    .theme-title { 
+        font-weight: bold; 
+        font-size: 1.1em;
+        color: #000000 !important; /* 제목 검은색 강제 지정 */
+    }
     .theme-meta { font-size: 0.9em; color: #555; }
     .theme-desc { font-size: 0.9em; margin-top: 5px; color: #333; }
 </style>
@@ -64,14 +70,10 @@ def render_cards(card_list):
         # 설명이 없으면 빈 문자열 처리
         desc = item.get('desc', '')
         
-        # 설명 길이 제한
-        if len(desc) > 100:
-            desc = desc[:100] + "..."
-        
         # white-space: pre-wrap을 적용하여 줄바꿈을 유지하고 텍스트가 영역을 넘어갈 때 자동 줄바꿈되도록 함
         st.markdown(f"""
         <div class='theme-card'>
-            <div class='theme-title'; color:black>{item['title']} <span style='font-size:0.8em; color:black'>({item['store']})</span></div>
+            <div class='theme-title'>{item['title']} <span style='font-size:0.8em; color:black'>({item['store']})</span></div>
             <div class='theme-meta'>⭐ 평점: {item['rating']} | 📍 {item['location']}</div>
             <hr style="margin: 8px 0; opacity: 0.2;">
             <div class='theme-desc' style='white-space: pre-wrap; line-height: 1.5;'>{desc}</div>
