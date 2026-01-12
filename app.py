@@ -180,9 +180,9 @@ def main():
                     else:
                         st.caption("검색 결과가 없습니다.")
             
-            if debug_mode and debug_info:
-                with st.expander("🛠️ 디버그 정보"):
-                    st.json(debug_info)
+            # if debug_mode and debug_info:
+            #     with st.expander("🛠️ 디버그 정보"):
+            #         st.json(debug_info)
 
     # 사용자 입력 처리
     if prompt := st.chat_input("메시지를 입력하세요..."):
