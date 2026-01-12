@@ -69,6 +69,10 @@ def render_cards(card_list):
     for item in card_list:
         # 설명이 없으면 빈 문자열 처리
         desc = item.get('desc', '')
+
+        # 설명 길이 제한
+        if len(desc) > 100:
+            desc = desc[:100] + "..."
         
         # white-space: pre-wrap을 적용하여 줄바꿈을 유지하고 텍스트가 영역을 넘어갈 때 자동 줄바꿈되도록 함
         st.markdown(f"""
