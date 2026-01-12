@@ -119,14 +119,15 @@ def main():
                     for l in logs:
                         st.text(l)
 
-            if cards:
-                tab1, tab2, tab3 = st.tabs(["🎯 맞춤 추천", "🔎 조건 추천", "🧩 유사 검색"])
+                        if cards:
+                tab1, tab2 = st.tabs(["🎯 맞춤 추천", "🔎 조건 추천"])
+                # tab1, tab2, tab3 = st.tabs(["🎯 맞춤 추천", "🔎 조건 추천", "📑 시나리오 추천"])
                 with tab1:
                     if 'personalized' in cards:
                         for item in cards['personalized']:
                             st.markdown(f"""
                             <div class='theme-card'>
-                                <div class='theme-title'>{item['title']} <span style='font-size:0.8em; color:gray'>({item['store']})</span></div>
+                                <div class='theme-title'>{item['title']} <span style='font-size:0.8em; color:black'>({item['store']})</span></div>
                                 <div class='theme-meta'>⭐ 평점: {item['rating']} | 📍 {item['location']}</div>
                                 <div style='font-size:0.9em; margin-top:5px;'>{item['desc']}</div>
                             </div>
@@ -136,15 +137,27 @@ def main():
                 with tab2:
                     if 'rule_based' in cards:
                         for item in cards['rule_based']:
-                            st.markdown(f"**{item['title']}** ({item['store']}) - ⭐{item['rating']}")
+                            st.markdown(f"""
+                            <div class='theme-card'>
+                                <div class='theme-title'>{item['title']} <span style='font-size:0.8em; color:black'>({item['store']})</span></div>
+                                <div class='theme-meta'>⭐ 평점: {item['rating']} | 📍 {item['location']}</div>
+                                <div style='font-size:0.9em; margin-top:5px;'>{item['desc']}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
                     else:
                         st.caption("결과 없음")
-                with tab3:
-                    if 'text_search' in cards:
-                        for item in cards['text_search']:
-                            st.markdown(f"- {item['title']}")
-                    else:
-                        st.caption("결과 없음")
+                                # with tab2:
+                #     if 'rule_based' in cards:
+                #         for item in cards['rule_based']:
+                #             st.markdown(f"**{item['title']}** ({item['store']}) - ⭐{item['rating']}")
+                #     else:
+                #         st.caption("결과 없음")
+                # with tab3:
+                #     if 'text_search' in cards:
+                #         for item in cards['text_search']:
+                #             st.markdown(f"- {item['title']}")
+                #     else:
+                #         st.caption("결과 없음")
             
             if debug_mode and debug_info:
                 with st.expander("🛠️ 디버그 정보"):
