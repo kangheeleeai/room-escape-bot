@@ -101,9 +101,11 @@ class EscapeBotEngine:
         
         if not self.groq_client: return {}
         
+        # [변경됨] locations를 리스트(Array) 형태로 추출하도록 지시
         prompt = f"""
         사용자의 질문을 분석하여 방탈출 챗봇의 의도(Intent)와 정보를 추출하세요.
         질문: "{user_query}"
+        
         [분석 규칙]
         1. "played_check_inquiry": 플레이 기록 방법 문의
         2. "played_check": 플레이 했다고 말함 (예: "강남 링 했어")
@@ -111,23 +113,40 @@ class EscapeBotEngine:
         4. "recommend": 추천 요청
         5. "another_recommend": 다른 거 추천 요청
         
-        [반환 필드] action, items(location, theme), location, keywords, mentioned_users
+        [지역 추출 규칙]
+        - "강남, 홍대 쪽에..." 처럼 여러 지역이 언급되면 locations 리스트에 모두 담으세요.
+        - "건대나 성수" -> ["건대", "성수"]
+        
+        [반환 필드] 
+        - action (string)
+        - locations (Array of strings, e.g. ["강남", "홍대"])
+        - keywords (Array of strings)
+        - mentioned_users (Array of strings)
+        - items (Array of objects {{location, theme}} for played_check)
+        
         JSON only.
         """
         try:
             result_str = self._call_llm(prompt, json_mode=True)
             cleaned_str = self._clean_json_string(result_str)
             result = json.loads(cleaned_str)
-            if on_log: on_log(f"   -> 분석 완료: {result.get('action')}, 키워드: {result.get('keywords')}")
+            
+            # 후처리: locations가 없거나 문자열로 온 경우 리스트로 변환
+            locs = result.get('locations')
+            if isinstance(locs, str):
+                result['locations'] = [locs]
+            elif not locs:
+                # 하위 호환: location 필드가 있으면 그걸 씀
+                single_loc = result.get('location')
+                result['locations'] = [single_loc] if single_loc else []
+
+            if on_log: on_log(f"   -> 분석 완료: {result.get('action')}, 지역: {result.get('locations')}")
             return result
         except Exception as e:
             if on_log: on_log(f"   ❌ 의도 분석 실패: {e}")
-            return {"action": "recommend", "keywords": [user_query]}
+            return {"action": "recommend", "keywords": [user_query], "locations": []}
 
     def generate_reply(self, user_query, user_context=None, session_context=None, on_log=None):
-        """
-        on_log: 로그 메시지를 출력할 콜백 함수 (예: st.write)
-        """
         if not self.groq_client:
             return "⚠️ API Key 설정 필요", {}, {}, "error", {}
 
@@ -146,13 +165,13 @@ class EscapeBotEngine:
             if not user_context:
                 return "⚠️ 닉네임을 먼저 설정해주세요.", {}, {}, action, debug_info
             
-            # [Fix] items가 null일 경우 빈 리스트로 처리
             items = intent_data.get('items') or []
+            # Fallback for single item
             if not items and intent_data.get('theme'):
-                items.append({"location": intent_data.get('location'), "theme": intent_data.get('theme')})
+                loc = intent_data.get('locations')[0] if intent_data.get('locations') else ""
+                items.append({"location": loc, "theme": intent_data.get('theme')})
 
             results_msg = []
-            success_count = 0
             
             for item in items:
                 loc = item.get('location')
@@ -161,17 +180,15 @@ class EscapeBotEngine:
                     tid = self.find_theme_id(loc, theme, on_log)
                     if tid:
                         res = self.update_play_history(user_context, tid, action, on_log)
-                        if "완료" in res: success_count += 1
                         results_msg.append(f"- **{theme}**: {res}")
                     else:
                         results_msg.append(f"- **{theme}**: ⚠️ 테마 못 찾음")
             
             return "\n".join(results_msg), {}, {}, action, debug_info
 
-        # 3. 필터 설정
-        # [Fix] LLM이 null을 반환할 경우를 대비하여 (or [])로 안전하게 처리
+        # 3. 필터 설정 (locations 리스트 처리)
         current_filters = {
-            'location': intent_data.get('location'),
+            'locations': intent_data.get('locations') or [],
             'keywords': intent_data.get('keywords') or [],
             'mentioned_users': intent_data.get('mentioned_users') or []
         }
@@ -189,7 +206,9 @@ class EscapeBotEngine:
         if action == 'another_recommend' and session_context:
             filters_to_use = session_context.get('last_filters', {})
             exclude_ids = list(session_context.get('shown_ids', []))
-            if current_filters.get('location'): filters_to_use['location'] = current_filters['location']
+            # 위치 변경 요청이 있으면 덮어쓰기
+            if current_filters.get('locations'): 
+                filters_to_use['locations'] = current_filters['locations']
         else:
             filters_to_use = current_filters
             exclude_ids = []
@@ -211,7 +230,6 @@ class EscapeBotEngine:
                 final_context, user_query=user_query, limit=3, filters=filters_to_use, exclude_ids=exclude_ids, log_func=on_log
             )
             if candidates_vector:
-                # recommend_by_user_search 내부에서 이미 정렬하므로 그대로 사용
                 final_results['personalized'] = candidates_vector
 
         # Fallback
@@ -224,18 +242,19 @@ class EscapeBotEngine:
             else:
                 return "조건에 맞는 테마를 찾지 못했습니다.", {}, filters_to_use, action, debug_info
 
-        # 5. [수정됨] LLM 설명 대신 고정 템플릿 답변 생성
+        # 5. 답변 생성
         if on_log: on_log("📝 답변 생성 중 (Fixed Template)...")
         
-        # 토픽 문자열 구성 (예: "강남 공포")
-        loc_str = intent_data.get('location') or ""
+        # 토픽 문자열 구성 (예: "강남, 홍대 공포")
+        locs = intent_data.get('locations') or []
+        loc_str = ", ".join(locs) if locs else ""
+        
         keywords = intent_data.get('keywords', [])
         kws_str = " ".join(keywords) if isinstance(keywords, list) else str(keywords)
+        
         topic_str = f"{loc_str} {kws_str}".strip()
-        if not topic_str: 
-            topic_str = "요청하신"
+        if not topic_str: topic_str = "요청하신"
 
-        # 닉네임 (없으면 '회원'으로 표시)
         display_name = user_context if user_context else "회원"
 
         response_text = f"{topic_str} 방탈출을 추천해드릴게요!\n\n" \
