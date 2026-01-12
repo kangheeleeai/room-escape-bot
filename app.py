@@ -213,7 +213,7 @@ def main():
                         prompt, 
                         user_context=nickname,
                         session_context=session_ctx,
-                        on_log=ui_logger
+                        # on_log=ui_logger
                     )
                     
                     status.update(label="추리 완료!", state="complete", expanded=False)
