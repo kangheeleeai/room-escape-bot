@@ -119,7 +119,7 @@ def main():
                     for l in logs:
                         st.text(l)
 
-                        if cards:
+            if cards:
                 tab1, tab2 = st.tabs(["🎯 맞춤 추천", "🔎 조건 추천"])
                 # tab1, tab2, tab3 = st.tabs(["🎯 맞춤 추천", "🔎 조건 추천", "📑 시나리오 추천"])
                 with tab1:
